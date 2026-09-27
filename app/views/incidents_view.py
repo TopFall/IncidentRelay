@@ -8,6 +8,7 @@ from app.api.schemas.incidents import (
     IncidentUpdateSchema,
 )
 from app.modules.db import incident_core_repo, incidents_repo
+from app.modules.db.models import AlertGroup
 from app.services.incidents.core import (
     IncidentConflictError,
     IncidentValidationError,
@@ -290,6 +291,15 @@ def link_incident_alert_group(incident_id):
     payload, error = validate_body(IncidentLinkSchema)
     if error:
         return error
+
+    alert_group = AlertGroup.get_or_none(AlertGroup.id == payload.alert_group_id)
+    if not alert_group:
+        return make_error_response("not_found", "Alert group not found", 404)
+    if alert_group.team_id:
+        error = require_team_respond(alert_group.team_id)
+        if error:
+            return error
+
     try:
         link = link_alert_group(
             incident.id,

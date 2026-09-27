@@ -79,7 +79,11 @@ function refreshNotificationPolicies() {
         notificationPoliciesCache = asArray(policies);
         renderNotificationPoliciesSummary();
         renderNotificationPoliciesTable();
-        restoreNotificationPolicyDetails();
+
+        if ($("#notification-policy-details-modal").hasClass("is-open")) {
+            restoreNotificationPolicyDetails();
+        }
+
         updateNotificationPolicyCreateButtonState();
     });
 }
@@ -178,9 +182,7 @@ function renderNotificationPolicyRow(policy) {
                     .addClass("name-button")
                     .text(policy.name || "-")
                     .on("click", function () {
-                        renderNotificationPolicyDetails(policy, {
-                            scroll: true,
-                        });
+                        openNotificationPolicyDetailsModal(policy);
                     })
             )
             .append(
@@ -268,7 +270,12 @@ function notificationPolicyDetailsItem(label, value) {
         .append($("<div>").addClass("details-value").text(value || "-"));
 }
 
-function renderNotificationPolicyDetails(policy, options) {
+function openNotificationPolicyDetailsModal(policy) {
+    renderNotificationPolicyDetails(policy);
+    openAppModal("#notification-policy-details-modal");
+}
+
+function renderNotificationPolicyDetails(policy) {
     selectedNotificationPolicyDetailsId = policy.id;
 
     $("#notification-policy-details-subtitle").text(
@@ -323,6 +330,7 @@ function renderNotificationPolicyDetails(policy, options) {
         icon: "fas fa-edit",
         label: i18n.t("notification_policies.actions.edit_policy"),
         onClick: function () {
+            closeAppModal("#notification-policy-details-modal");
             editNotificationPolicy(policy.id);
         },
     });
@@ -332,6 +340,7 @@ function renderNotificationPolicyDetails(policy, options) {
         icon: "fas fa-list",
         label: i18n.t("notification_policies.actions.manage_rules"),
         onClick: function () {
+            closeAppModal("#notification-policy-details-modal");
             openNotificationPolicyRulesModal(policy.id);
         },
     });
@@ -359,13 +368,6 @@ function renderNotificationPolicyDetails(policy, options) {
     if (actions.children().length) {
         body.append(actions);
     }
-
-    if (options && options.scroll) {
-        scrollToAndHighlight("#notification-policy-details-body", {
-            highlight: "#notification-policy-details-body",
-            block: "nearest",
-        });
-    }
 }
 
 function renderNotificationPolicyDetailsEmpty() {
@@ -380,26 +382,22 @@ function renderNotificationPolicyDetailsEmpty() {
 }
 
 function restoreNotificationPolicyDetails() {
-    const policies = getFilteredNotificationPolicies();
+    if (!selectedNotificationPolicyDetailsId) {
+        return;
+    }
 
-    if (!policies.length) {
+    const selected = getFilteredNotificationPolicies().find(function (policy) {
+        return Number(policy.id)
+            === Number(selectedNotificationPolicyDetailsId);
+    });
+
+    if (!selected) {
+        closeAppModal("#notification-policy-details-modal");
         renderNotificationPolicyDetailsEmpty();
         return;
     }
 
-    if (selectedNotificationPolicyDetailsId) {
-        const selected = policies.find(function (policy) {
-            return Number(policy.id)
-                === Number(selectedNotificationPolicyDetailsId);
-        });
-
-        if (selected) {
-            renderNotificationPolicyDetails(selected);
-            return;
-        }
-    }
-
-    renderNotificationPolicyDetails(policies[0]);
+    renderNotificationPolicyDetails(selected);
 }
 
 function getNotificationPolicyById(policyId) {
@@ -899,18 +897,25 @@ function notificationPolicyRuleCheckbox(
     checked,
     columnClass
 ) {
-    return $("<label>")
+    const id = notificationPolicyRuleFieldId(rule.id, field);
+
+    return $("<div>")
         .addClass(
-            "md-checkbox app-field layer-settings-checkbox "
+            "app-field "
             + (columnClass || "layer-settings-col-6")
         )
         .append(
-            $("<input>")
-                .attr("id", notificationPolicyRuleFieldId(rule.id, field))
-                .attr("type", "checkbox")
-                .prop("checked", !!checked)
-        )
-        .append($("<span>").text(label));
+            $("<label>")
+                .addClass("md-checkbox layer-settings-checkbox")
+                .attr("for", id)
+                .append(
+                    $("<input>")
+                        .attr("id", id)
+                        .attr("type", "checkbox")
+                        .prop("checked", !!checked)
+                )
+                .append($("<span>").text(label))
+        );
 }
 
 function notificationPolicyRuleEventCheckbox(rule, eventType, label) {
@@ -1887,7 +1892,10 @@ $(document).on(
     "#notification-policies-search",
     function () {
         renderNotificationPoliciesTable();
-        restoreNotificationPolicyDetails();
+
+        if ($("#notification-policy-details-modal").hasClass("is-open")) {
+            restoreNotificationPolicyDetails();
+        }
     }
 );
 
@@ -1896,7 +1904,10 @@ $(document).on(
     "#notification-policies-status-filter",
     function () {
         renderNotificationPoliciesTable();
-        restoreNotificationPolicyDetails();
+
+        if ($("#notification-policy-details-modal").hasClass("is-open")) {
+            restoreNotificationPolicyDetails();
+        }
     }
 );
 $(document).on(
