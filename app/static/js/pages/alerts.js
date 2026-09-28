@@ -2,7 +2,9 @@ let currentDetailsAlertId = null;
 let currentDetailsAlertCanRespond = false;
 let currentDetailsAlertShelved = false;
 let currentShelveAlertId = null;
+let currentShelveAlertIds = [];
 let currentShelveAlertCanRespond = false;
+let currentShelveBulkMode = false;
 let currentShelveSuccessCallback = null;
 const ALERT_EVENTS_PAGE_SIZE = 50;
 let currentDetailsActiveTab = "summary";
@@ -79,10 +81,31 @@ const alertsSortColumns = {
         defaultDirection: "desc",
     },
 };
+function configureAlertShelveModal(isBulk, count) {
+    $("#alert-shelve-title").text(
+        isBulk
+            ? i18n.t("alerts.bulk.shelve_title")
+            : i18n.t("alert_details.shelve.title")
+    );
+    $("#alert-shelve-help").text(
+        isBulk
+            ? i18n.t("alerts.bulk.shelve_help", {count: count || 0})
+            : i18n.t("alert_details.shelve.help")
+    );
+    $("#confirm-alert-shelve").text(
+        isBulk
+            ? i18n.t("alerts.bulk.shelve_confirm")
+            : i18n.t("alert_details.actions.shelve")
+    );
+}
+
 function resetAlertShelveContext() {
     currentShelveAlertId = null;
+    currentShelveAlertIds = [];
     currentShelveAlertCanRespond = false;
+    currentShelveBulkMode = false;
     currentShelveSuccessCallback = null;
+    configureAlertShelveModal(false, 0);
 }
 
 function openAlertShelveModal(alertId, options) {
@@ -97,13 +120,16 @@ function openAlertShelveModal(alertId, options) {
     }
 
     currentShelveAlertId = targetId;
+    currentShelveAlertIds = [targetId];
     currentShelveAlertCanRespond = true;
+    currentShelveBulkMode = false;
     currentShelveSuccessCallback = (
         typeof settings.onSuccess === "function"
             ? settings.onSuccess
             : null
     );
 
+    configureAlertShelveModal(false, 1);
     $("#alert-shelve-duration").val("3600");
     $("#alert-shelve-reason").val("");
     openAppModal("#alert-shelve-modal");
@@ -165,6 +191,12 @@ function selectedAlertGroups() {
     });
 }
 
+function alertGroupIsShelved(alert) {
+    return Boolean(
+        alert
+        && (alert.shelved || (alert.shelve && alert.shelve.active))
+    );
+}
 
 function selectedAlertGroupsForBulkAction(action) {
     return selectedAlertGroups().filter(function (alert) {
@@ -174,12 +206,22 @@ function selectedAlertGroupsForBulkAction(action) {
             return false;
         }
 
+        const shelved = alertGroupIsShelved(alert);
+
         if (action === "ack") {
-            return status === "firing";
+            return status === "firing" && !shelved;
         }
 
-        if (action === i18n.t("alert_details.bulk.resolve_action")) {
+        if (action === "resolve") {
             return status !== "resolved" && status !== "merged";
+        }
+
+        if (action === "shelve") {
+            return status !== "resolved" && status !== "merged" && !shelved;
+        }
+
+        if (action === "unshelve") {
+            return status !== "resolved" && status !== "merged" && shelved;
         }
 
         return false;
@@ -265,6 +307,20 @@ function ensureAlertsBulkActionsBar() {
         .append(
             $("<button>")
                 .attr("type", "button")
+                .attr("id", "alerts-shelve-selected")
+                .addClass("btn btn-warning btn-small")
+                .text(i18n.t("alerts.bulk.shelve"))
+        )
+        .append(
+            $("<button>")
+                .attr("type", "button")
+                .attr("id", "alerts-unshelve-selected")
+                .addClass("btn btn-secondary btn-small")
+                .text(i18n.t("alerts.bulk.unshelve"))
+        )
+        .append(
+            $("<button>")
+                .attr("type", "button")
                 .attr("id", "alerts-resolve-selected")
                 .addClass("btn btn-resolve btn-small")
                 .text(i18n.t("alerts.bulk.resolve"))
@@ -293,13 +349,21 @@ function renderAlertsBulkActions() {
     const bar = ensureAlertsBulkActionsBar();
     const count = selectedAlertGroupIds.size;
     const ackCount = selectedAlertGroupsForBulkAction("ack").length;
-    const resolveCount = selectedAlertGroupsForBulkAction(i18n.t("alert_details.bulk.resolve_action")).length;
+    const shelveCount = selectedAlertGroupsForBulkAction("shelve").length;
+    const unshelveCount = selectedAlertGroupsForBulkAction("unshelve").length;
+    const resolveCount = selectedAlertGroupsForBulkAction("resolve").length;
 
     bar.toggle(count > 0);
     bar.find("#alerts-bulk-selected-count").text(i18n.t("alerts.bulk.selected", {count: count}));
     bar.find("#alerts-ack-selected")
         .prop("disabled", ackCount < 1)
         .text(ackCount > 0 ? i18n.t("alerts.bulk.ack_count", {count: ackCount}) : i18n.t("alerts.bulk.ack"));
+    bar.find("#alerts-shelve-selected")
+        .prop("disabled", shelveCount < 1)
+        .text(shelveCount > 0 ? i18n.t("alerts.bulk.shelve_count", {count: shelveCount}) : i18n.t("alerts.bulk.shelve"));
+    bar.find("#alerts-unshelve-selected")
+        .prop("disabled", unshelveCount < 1)
+        .text(unshelveCount > 0 ? i18n.t("alerts.bulk.unshelve_count", {count: unshelveCount}) : i18n.t("alerts.bulk.unshelve"));
     bar.find("#alerts-resolve-selected")
         .prop("disabled", resolveCount < 1)
         .text(resolveCount > 0 ? i18n.t("alerts.bulk.resolve_count", {count: resolveCount}) : i18n.t("alerts.bulk.resolve"));
@@ -3213,17 +3277,35 @@ $(document).on("click", "#confirm-alert-shelve", function () {
 
     const button = $(this);
     const targetId = currentShelveAlertId;
+    const targetIds = currentShelveAlertIds.length
+        ? currentShelveAlertIds.slice()
+        : [targetId];
+    const isBulk = currentShelveBulkMode;
     const onSuccess = currentShelveSuccessCallback;
     const durationSeconds = Number($("#alert-shelve-duration").val() || 3600);
     const reason = String($("#alert-shelve-reason").val() || "").trim();
+    const payload = {duration_seconds: durationSeconds, reason: reason || null};
 
     if (window.AppLoading) {
         AppLoading.setButtonLoading(button, true);
     }
 
+    if (isBulk) {
+        runAlertGroupBulkAction("shelve", targetIds, payload, function () {
+            if (window.AppLoading) {
+                AppLoading.setButtonLoading(button, false);
+            }
+            closeAppModal("#alert-shelve-modal");
+            resetAlertShelveContext();
+            selectedAlertGroupIds.clear();
+            loadAlerts();
+        });
+        return;
+    }
+
     apiPost(
         "/api/alert-groups/" + targetId + "/shelve",
-        {duration_seconds: durationSeconds, reason: reason || null},
+        payload,
         function () {
             if (window.AppLoading) {
                 AppLoading.setButtonLoading(button, false);
@@ -3438,34 +3520,108 @@ $(document).on("click", "#alerts-ack-selected", function () {
     bulkUpdateSelectedAlertGroups("ack");
 });
 
+$(document).on("click", "#alerts-shelve-selected", function () {
+    bulkShelveSelectedAlertGroups();
+});
+
+$(document).on("click", "#alerts-unshelve-selected", function () {
+    bulkUnshelveSelectedAlertGroups();
+});
+
 $(document).on("click", "#alerts-resolve-selected", function () {
-    bulkUpdateSelectedAlertGroups(i18n.t("alert_details.bulk.resolve_action"));
+    bulkUpdateSelectedAlertGroups("resolve");
 });
 
 $(document).on("click", "#alerts-merge-selected", function () {
     mergeSelectedAlertGroups();
 });
 
-function runAlertGroupBulkAction(action, ids, onDone) {
+function runAlertGroupBulkAction(action, ids, payload, onDone) {
+    if (typeof payload === "function") {
+        onDone = payload;
+        payload = {};
+    }
+
     const queue = ids.slice();
+    const failures = [];
+    const requestPayload = payload || {};
 
     function next() {
         const id = queue.shift();
 
         if (!id) {
+            if (failures.length) {
+                showApiError(failures[0].xhr);
+            }
             if (typeof onDone === "function") {
-                onDone();
+                onDone(failures);
             }
             return;
         }
 
         const endpointAction = action === "ack" ? "acknowledge" : action;
-        apiPost("/api/alert-groups/" + id + "/" + endpointAction, {}, next);
+        apiPost(
+            "/api/alert-groups/" + id + "/" + endpointAction,
+            requestPayload,
+            next,
+            function (xhr) {
+                failures.push({id: id, xhr: xhr});
+                next();
+            }
+        );
     }
 
     next();
 }
 
+function bulkShelveSelectedAlertGroups() {
+    const candidates = selectedAlertGroupsForBulkAction("shelve");
+    const ids = candidates.map(function (alert) {
+        return Number(alert.id);
+    }).filter(Boolean);
+
+    if (!ids.length) {
+        showAppError(i18n.t("alerts.bulk.shelve_required"));
+        return;
+    }
+
+    currentShelveAlertId = ids[0];
+    currentShelveAlertIds = ids;
+    currentShelveAlertCanRespond = true;
+    currentShelveBulkMode = true;
+    currentShelveSuccessCallback = null;
+    configureAlertShelveModal(true, ids.length);
+    $("#alert-shelve-duration").val("3600");
+    $("#alert-shelve-reason").val("");
+    openAppModal("#alert-shelve-modal");
+}
+
+function bulkUnshelveSelectedAlertGroups() {
+    const candidates = selectedAlertGroupsForBulkAction("unshelve");
+    const ids = candidates.map(function (alert) {
+        return Number(alert.id);
+    }).filter(Boolean);
+
+    if (!ids.length) {
+        showAppError(i18n.t("alerts.bulk.unshelve_required"));
+        return;
+    }
+
+    showAppConfirm({
+        title: i18n.t("alerts.bulk.unshelve_title"),
+        message: i18n.t("alert_details.bulk.message", {
+            action: i18n.t("alerts.bulk.unshelve_action"),
+            count: ids.length
+        }),
+        confirmText: i18n.t("alerts.bulk.unshelve_confirm"),
+        confirmClass: "btn-warning"
+    }).done(function () {
+        runAlertGroupBulkAction("unshelve", ids, function () {
+            selectedAlertGroupIds.clear();
+            loadAlerts();
+        });
+    });
+}
 
 function bulkUpdateSelectedAlertGroups(action) {
     const candidates = selectedAlertGroupsForBulkAction(action);

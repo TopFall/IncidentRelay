@@ -44,6 +44,7 @@
   "incidents.empty.none": "Инциденты не найдены",
   "incidents.labels.unassigned": "Не назначен",
   "incidents.pagination.total": "Инцидентов: {count}",
+  "incidents.pagination.per_page": "Инцидентов на странице",
   "incidents.pagination.page": "Страница {page} из {pages}",
   "incidents.create.title": "Создать инцидент",
   "incidents.create.subtitle": "Создаёт операционный Incident без создания AlertGroup",

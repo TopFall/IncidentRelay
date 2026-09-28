@@ -78,8 +78,8 @@
         <thead>
           <tr>
             <th>{{ _('incidents.table.id') }}</th>
-            <th>{{ _('incidents.table.title') }}</th>
             <th>{{ _('incidents.table.status') }}</th>
+            <th>{{ _('incidents.table.title') }}</th>
             <th>{{ _('incidents.table.priority') }}</th>
             <th>{{ _('incidents.table.team') }}</th>
             <th>{{ _('incidents.table.service') }}</th>
@@ -95,7 +95,17 @@
     </div>
 
     <div class="table-pagination table-pagination-attached">
-      <div id="incidents-pagination-summary" class="table-pagination-left"></div>
+      <div class="table-pagination-left">
+        <label class="details-meta table-pagination-size-label">
+          {{ _('incidents.pagination.per_page') }}
+          <select id="incidents-page-size" class="input input-sm table-page-size">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
       <div id="incidents-pagination-page" class="table-pagination-center"></div>
       <div class="table-pagination-actions">
         <button id="incidents-prev-page" type="button" class="btn btn-small">{{ _('incidents.actions.previous') }}</button>

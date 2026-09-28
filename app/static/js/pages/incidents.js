@@ -97,6 +97,7 @@ function loadIncidents() {
         }
         const items = incidentAsArray(response);
         incidentsPagination = response.pagination || {page: 1, pages: 0, total: items.length};
+        incidentsPageSize = Number(incidentsPagination.page_size || incidentsPageSize || 25);
         renderIncidentsTable(items);
         renderIncidentsPagination();
         loadIncidentsSummary(generation);
@@ -169,7 +170,20 @@ function renderIncidentsTable(items) {
 
     items.forEach(function (incident) {
         const row = $("<tr>");
-        row.append($("<td>").text("#" + incident.id));
+        row.append(
+            $("<td>").append(
+                $("<a>")
+                    .attr("href", buildIncidentDetailsUrl(incident.id))
+                    .attr("title", i18n.t("incidents.actions.open"))
+                    .addClass("alerts-id-link")
+                    .text("#" + incident.id)
+                    .on("click", function (event) {
+                        event.preventDefault();
+                        openIncidentDetailsPage(incident.id);
+                    })
+            )
+        );
+        row.append($("<td>").append(incidentStatusPill(incident.workflow_status)));
         row.append(
             $("<td>").append(
                 $("<button>")
@@ -181,7 +195,6 @@ function renderIncidentsTable(items) {
                     })
             )
         );
-        row.append($("<td>").append(incidentStatusPill(incident.workflow_status)));
         row.append($("<td>").append(incidentPriorityBadge(incident.priority)));
         row.append($("<td>").text(incident.team_name || incident.team_slug || "-"));
         row.append($("<td>").text(incident.service_name || incident.service_slug || "-"));
@@ -214,9 +227,10 @@ function renderIncidentsPagination() {
     const total = Number(incidentsPagination.total || 0);
     incidentsCurrentPage = page;
 
-    $("#incidents-pagination-summary").text(
+    $("#incidents-list-subtitle").text(
         i18n.t("incidents.pagination.total", {count: total})
     );
+    $("#incidents-page-size").val(String(incidentsPageSize));
     $("#incidents-pagination-page").text(
         pages
             ? i18n.t("incidents.pagination.page", {page: page, pages: pages})
@@ -401,9 +415,12 @@ function saveIncidentCreate() {
     });
 }
 
+function buildIncidentDetailsUrl(incidentId) {
+    return appUrlWithGlobalTeamScope("/incidents/" + encodeURIComponent(incidentId));
+}
+
 function openIncidentDetailsPage(incidentId) {
-    const target = appUrlWithGlobalTeamScope("/incidents/" + encodeURIComponent(incidentId));
-    navigate(target, true);
+    navigate(buildIncidentDetailsUrl(incidentId), true);
 }
 
 function incidentIdFromLocation() {
@@ -770,6 +787,11 @@ function linkIncidentAlertGroup(groupId, relationType) {
 $(document).on("click", "#reload-incidents", function () { loadIncidents(); });
 $(document).on("input", "#incidents-search", function () { incidentsCurrentPage = 1; loadIncidents(); });
 $(document).on("change", "#incidents-status-filter", function () { incidentsCurrentPage = 1; loadIncidents(); });
+$(document).on("change", "#incidents-page-size", function () {
+    incidentsPageSize = parseInt($(this).val(), 10) || 25;
+    incidentsCurrentPage = 1;
+    loadIncidents();
+});
 $(document).on("click", "#incidents-prev-page", function () { if (incidentsCurrentPage > 1) { incidentsCurrentPage -= 1; loadIncidents(); } });
 $(document).on("click", "#incidents-next-page", function () { if (incidentsCurrentPage < Number(incidentsPagination.pages || 0)) { incidentsCurrentPage += 1; loadIncidents(); } });
 

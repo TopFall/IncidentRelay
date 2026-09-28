@@ -44,6 +44,7 @@
   "incidents.empty.none": "No incidents found",
   "incidents.labels.unassigned": "Unassigned",
   "incidents.pagination.total": "{count} incidents",
+  "incidents.pagination.per_page": "Incidents pro Seite",
   "incidents.pagination.page": "Page {page} of {pages}",
   "incidents.create.title": "Create Incident",
   "incidents.create.subtitle": "Create an operational Incident without creating an AlertGroup",
